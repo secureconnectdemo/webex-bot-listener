@@ -7,7 +7,7 @@ const keys = require("./credentials.json");
 const app = express();
 app.use(bodyParser.json());
 
-const WEBEX_BOT_TOKEN = 'ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
+const WEBEX_BOT_TOKEN = 'Bearer ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
 
 const auth = new google.auth.JWT(
   keys.client_email,
@@ -59,27 +59,33 @@ async function getWebOrderOptions() {
 }
 
 app.post("/webhook", async (req, res) => {
-  let roomId = req.body.data.roomId;
-  let webOrder = null;
-  let text = null;
+  const data = req.body.data;
+  const roomId = data.roomId;
 
   try {
-    // If it's an Adaptive Card submission
-    if (req.body.data.inputs && req.body.data.inputs.webOrder) {
-      webOrder = req.body.data.inputs.webOrder;
-    } else {
-      // Typed message - get message text using messageId
-      const messageId = req.body.data.id;
+    let webOrder = null;
+
+    // ✅ Handle Adaptive Card submission
+    if (data && data.inputs && data.inputs.webOrder) {
+      webOrder = data.inputs.webOrder;
+    }
+
+    // ✅ Fallback: if user typed "show orders" → show dropdown
+    if (!webOrder) {
+      const messageId = data.id;
+
       const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
-        headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
+        headers: { Authorization: WEBEX_BOT_TOKEN }
       });
 
-      text = message.data.text?.trim();
+      const text = message.data.text?.trim().toLowerCase();
 
-      // If message says "show orders", show dropdown
-      if (text?.toLowerCase().includes("show orders")) {
+      if (text && text.includes("show orders")) {
         const webOrders = await getWebOrderOptions();
-        const choices = webOrders.map(order => ({ title: order, value: order }));
+        const choices = webOrders.map(order => ({
+          title: order,
+          value: order
+        }));
 
         const card = {
           type: "AdaptiveCard",
@@ -121,7 +127,7 @@ app.post("/webhook", async (req, res) => {
           },
           {
             headers: {
-              Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
+              Authorization: WEBEX_BOT_TOKEN,
               "Content-Type": "application/json"
             }
           }
@@ -129,35 +135,32 @@ app.post("/webhook", async (req, res) => {
         return res.sendStatus(200);
       }
 
-      // Otherwise, fallback to last word in message
+      // Fallback if typed message is not "show orders"
       if (text) {
-        webOrder = text.split(" ").pop();
+        const words = text.split(" ");
+        webOrder = words[words.length - 1];
       }
     }
 
-    // Now try to look up the customer
-    const customer = await getCustomerData(webOrder);
-    let markdown;
+    // ✅ Lookup and reply with customer data
+    if (webOrder) {
+      const customer = await getCustomerData(webOrder);
 
-    if (customer) {
-      markdown = `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`;
-    } else {
-      markdown = `⚠️ No data found for Web Order: **${webOrder}**`;
-    }
+      const markdown = customer
+        ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`
+        : `⚠️ No data found for Web Order: **${webOrder}**`;
 
-    await axios.post(
-      "https://webexapis.com/v1/messages",
-      {
-        roomId,
-        markdown
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
-          "Content-Type": "application/json"
+      await axios.post(
+        "https://webexapis.com/v1/messages",
+        { roomId, markdown },
+        {
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
+          }
         }
-      }
-    );
+      );
+    }
 
     res.sendStatus(200);
   } catch (error) {
