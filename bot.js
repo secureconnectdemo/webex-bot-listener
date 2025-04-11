@@ -227,15 +227,23 @@ app.post("/webhook", async (req, res) => {
         const chartUrl = getStagePieChartUrl(stageCounts);
     
         await axios.post("https://webexapis.com/v1/messages", {
-          roomId,
-          markdown: `📊 **Customer Stage Distribution**\n\n![Stage Chart](${chartUrl})`
-        }, {
-          headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-        });
-    
-        return res.sendStatus(200);
-      }
-    }    
+        roomId,
+        markdown: "📋 Customer Info",
+        attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
+      }, {
+        headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
+      });
 
+      return res.sendStatus(200);
+    }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Bot error:", error.response?.data || error.message);
+    res.sendStatus(500);
+  }
+}); // 🔧 <== this was missing — closes app.post()
+
+// ✅ Now this part makes sense:
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
