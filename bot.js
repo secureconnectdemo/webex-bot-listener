@@ -1,7 +1,8 @@
 
-console.log("📥 Normalized Text:", text);
 const rawText = messageRes.data.text || "";
 const text = rawText.toLowerCase().replace(/^secure\s*/i, "").trim();
+console.log("📥 Normalized Text:", text);
+
 for (const [command, handler] of Object.entries(commandHandlers)) {
   if (text.startsWith(command)) {
     await handler(roomId);
@@ -225,7 +226,7 @@ app.post("/webhook", async (req, res) => {
       const actionRes = await axios.get(`https://webexapis.com/v1/attachment/actions/${actionId}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
-      accountName = actionRes.data.inputs.accountName;
+      accountName = actionRes.data.inputs.accountName.trim();
     }
 
     // Handle slash or plain text commands
@@ -235,8 +236,8 @@ app.post("/webhook", async (req, res) => {
       });
 
       const rawText = messageRes.data.text || "";
-const text = rawText.toLowerCase().replace(/^secure\s+/i, "").trim();
-
+      const text = rawText.toLowerCase().replace(/^secure\s+/i, "").trim();
+      console.log("📥 Normalized Text:", text);
 
       for (const [command, handler] of Object.entries(commandHandlers)) {
         if (text.startsWith(command)) {
@@ -245,19 +246,17 @@ const text = rawText.toLowerCase().replace(/^secure\s+/i, "").trim();
         }
       }
 
-      // Text commands that are not slash-based
+      // Fallback: check substring match
       if (text.includes("show orders")) {
         await showOrders(roomId);
         return res.sendStatus(200);
       }
-      
-      
 
       if (text.includes("stage report")) {
         await showStageReport(roomId);
         return res.sendStatus(200);
       }
-      
+    }
 
     // ✅ Handle dropdown response with selected account
     if (accountName) {
@@ -276,13 +275,13 @@ const text = rawText.toLowerCase().replace(/^secure\s+/i, "").trim();
       return res.sendStatus(200);
     }
 
-    res.sendStatus(200);
-  }
+    res.sendStatus(200); // default fallback
   } catch (error) {
     console.error("❌ Bot error:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
+
  // 🔧 <== this was missing — closes app.post()
 
 // ✅ Now this part makes sense:
