@@ -59,13 +59,18 @@ async function getWebOrderOptions() {
 }
 
 app.post("/webhook", async (req, res) => {
-  const { data } = req.body;
-  const roomId = data.roomId;
+  const { data, resource } = req.body;
+  const roomId = data?.roomId;
   let webOrder = null;
 
+  console.log("📩 Incoming webhook resource:", resource);
+  console.log("📩 Webhook body:", JSON.stringify(req.body, null, 2));
+
   try {
-    // Step 1: Check for Adaptive Card submission
-    if (data.type === "submit" && data.id) {
+    // Step 1: If Adaptive Card was submitted
+    if (resource === "attachmentActions") {
+      console.log("📨 Detected Adaptive Card Submission");
+
       const actionId = data.id;
       const actionRes = await axios.get(
         `https://webexapis.com/v1/attachment/actions/${actionId}`,
@@ -74,18 +79,20 @@ app.post("/webhook", async (req, res) => {
         }
       );
 
-      if (actionRes.data?.inputs?.webOrder) {
-        webOrder = actionRes.data.inputs.webOrder;
-      }
+      const inputs = actionRes.data.inputs;
+      webOrder = inputs.webOrder;
+
+      console.log("✅ Submitted webOrder:", webOrder);
     }
 
-    // Step 2: Show dropdown if user types "show orders"
-    if (!webOrder && data.id) {
+    // Step 2: If "show orders" typed in message
+    if (!webOrder && data?.id) {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
 
       const text = messageRes.data.text?.toLowerCase().trim();
+      console.log("💬 Incoming message text:", text);
 
       if (text.includes("show orders")) {
         const options = await getWebOrderOptions();
@@ -139,14 +146,15 @@ app.post("/webhook", async (req, res) => {
             }
           }
         );
-
+        console.log("📤 Sent dropdown card");
         return res.sendStatus(200);
       }
     }
 
-    // Step 3: If a valid webOrder was submitted, send customer info
+    // Step 3: Process selected Web Order
     if (webOrder) {
       const customer = await getCustomerData(webOrder);
+      console.log("📦 Customer data fetched:", customer);
 
       const markdown = customer
         ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`
@@ -154,10 +162,7 @@ app.post("/webhook", async (req, res) => {
 
       await axios.post(
         "https://webexapis.com/v1/messages",
-        {
-          roomId,
-          markdown
-        },
+        { roomId, markdown },
         {
           headers: {
             Authorization: WEBEX_BOT_TOKEN,
@@ -165,6 +170,7 @@ app.post("/webhook", async (req, res) => {
           }
         }
       );
+      console.log("✅ Info card sent to Webex");
     }
 
     res.sendStatus(200);
