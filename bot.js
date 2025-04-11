@@ -233,59 +233,17 @@ app.post("/webhook", async (req, res) => {
 
       // Text commands that are not slash-based
       if (text.includes("show orders")) {
-        const options = await getAccountNameOptions();
-        const choices = options.map(order => ({ title: order, value: order }));
-
-        const card = {
-          type: "AdaptiveCard",
-          body: [
-            {
-              type: "TextBlock",
-              text: "🔍 Choose a Customer Account",
-              weight: "Bolder",
-              size: "Medium"
-            },
-            {
-              type: "Input.ChoiceSet",
-              id: "accountName",
-              placeholder: "Select an Account",
-              choices
-            }
-          ],
-          actions: [{ type: "Action.Submit", title: "Pull Customer Info" }],
-          $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
-          version: "1.3"
-        };
-
-        await axios.post("https://webexapis.com/v1/messages", {
-          roomId,
-          markdown: "Please select a Customer Account:",
-          attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
-        }, {
-          headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-        });
-
+        await showOrders(roomId);
         return res.sendStatus(200);
       }
+      
+      
 
       if (text.includes("stage report")) {
-        const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
-        const range = "Sheet1!A2:H";
-        const resData = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
-        const rows = resData.data.values || [];
-        const stageCounts = getStageCounts(rows);
-        const chartUrl = getStagePieChartUrl(stageCounts);
-
-        await axios.post("https://webexapis.com/v1/messages", {
-          roomId,
-          markdown: `📊 **Customer Stage Distribution**\n\n![Stage Chart](${chartUrl})`
-        }, {
-          headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-        });
-
+        await showStageReport(roomId);
         return res.sendStatus(200);
       }
-    }
+      
 
     // ✅ Handle dropdown response with selected account
     if (accountName) {
