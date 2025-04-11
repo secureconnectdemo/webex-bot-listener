@@ -63,12 +63,76 @@ app.post("/webhook", async (req, res) => {
   const roomId = req.body.data.roomId;
 
   try {
-    const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
-      headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
-    });
-
-    let text = message.data.text?.trim();
     let webOrder = null;
+
+// If it's an Adaptive Card submission
+if (req.body.data.inputs && req.body.data.inputs.webOrder) {
+  webOrder = req.body.data.inputs.webOrder;
+} else {
+  // Otherwise, fallback to message lookup
+  const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
+    headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
+  });
+
+  let text = message.data.text?.trim();
+  if (text?.toLowerCase().includes("show orders")) {
+    const webOrders = await getWebOrderOptions();
+    const choices = webOrders.map(order => ({ title: order, value: order }));
+
+    const card = {
+      type: "AdaptiveCard",
+      body: [
+        {
+          type: "TextBlock",
+          text: "🔍 Choose a Web Order",
+          weight: "Bolder",
+          size: "Medium"
+        },
+        {
+          type: "Input.ChoiceSet",
+          id: "webOrder",
+          placeholder: "Select a Web Order",
+          choices: choices
+        }
+      ],
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "Pull Customer Info"
+        }
+      ],
+      $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+      version: "1.3"
+    };
+
+    await axios.post(
+      "https://webexapis.com/v1/messages",
+      {
+        roomId,
+        markdown: "Please select a Web Order:",
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: card
+          }
+        ]
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    return res.sendStatus(200);
+  }
+
+  // Fallback for regular messages
+  if (text) {
+    webOrder = text.split(" ").pop();
+  }
+}
+
 
     // 1. Handle Adaptive Card form submission
     if (req.body.data?.inputs?.webOrder) {
