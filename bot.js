@@ -143,17 +143,19 @@ app.post("/webhook", async (req, res) => {
         ? `📋 **Customer Info for ${webOrder}**\n- Start Date: ${customer.startDate}\n- Days Since Start: ${customer.daysSince}\n- Onboarding Specialist: ${customer.specialist}\n- Strategic CSS: ${customer.css}\n- ARR: $${customer.arr}\n- Sentiment: ${customer.sentiment}\n- Stage: ${customer.stage}`
         : `⚠️ No data found for Web Order: **${webOrder}**`;
 
-      await axios.post("https://webexapis.com/v1/messages", { roomId, markdown }, {
-        headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-      });
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Bot error:", error.response?.data || error.message);
-    res.sendStatus(500);
-  }
-});
+        await axios.post("https://webexapis.com/v1/messages", {
+          roomId,
+          markdown: `📊 **Customer Stage Distribution**  
+        Here is the chart:  
+        [Open Chart in Browser](${chartUrl})  
+        
+        ![Stage Chart](${chartUrl})`
+        }, {
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
+          }
+        });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
