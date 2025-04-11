@@ -58,6 +58,26 @@ async function getWebOrderOptions() {
   return rows.map(row => row[0]);
 }
 
+function getStageCounts(rows) {
+  const counts = { Onboarding: 0, 'In Progress': 0, Completed: 0, Delayed: 0 };
+  rows.forEach(row => {
+    const stage = row[7]; // Column H = "Stage"
+    if (counts[stage] !== undefined) counts[stage]++;
+  });
+  return counts;
+}
+
+function getStagePieChartUrl(stageCounts) {
+  const chart = {
+    type: 'pie',
+    data: {
+      labels: Object.keys(stageCounts),
+      datasets: [{ data: Object.values(stageCounts) }]
+    }
+  };
+  return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chart))}`;
+}
+
 app.post("/webhook", async (req, res) => {
   const { data, resource } = req.body;
   const roomId = data?.roomId;
@@ -67,17 +87,13 @@ app.post("/webhook", async (req, res) => {
   console.log("📩 Webhook body:", JSON.stringify(req.body, null, 2));
 
   try {
-    // Step 1: If Adaptive Card was submitted
     if (resource === "attachmentActions") {
       console.log("📨 Detected Adaptive Card Submission");
 
       const actionId = data.id;
-      const actionRes = await axios.get(
-        `https://webexapis.com/v1/attachment/actions/${actionId}`,
-        {
-          headers: { Authorization: WEBEX_BOT_TOKEN }
-        }
-      );
+      const actionRes = await axios.get(`https://webexapis.com/v1/attachment/actions/${actionId}`, {
+        headers: { Authorization: WEBEX_BOT_TOKEN }
+      });
 
       const inputs = actionRes.data.inputs;
       webOrder = inputs.webOrder;
@@ -85,7 +101,6 @@ app.post("/webhook", async (req, res) => {
       console.log("✅ Submitted webOrder:", webOrder);
     }
 
-    // Step 2: If "show orders" typed in message
     if (!webOrder && data?.id) {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
@@ -96,10 +111,7 @@ app.post("/webhook", async (req, res) => {
 
       if (text.includes("show orders")) {
         const options = await getWebOrderOptions();
-        const choices = options.map(order => ({
-          title: order,
-          value: order
-        }));
+        const choices = options.map(order => ({ title: order, value: order }));
 
         const card = {
           type: "AdaptiveCard",
@@ -127,31 +139,48 @@ app.post("/webhook", async (req, res) => {
           version: "1.3"
         };
 
-        await axios.post(
-          "https://webexapis.com/v1/messages",
-          {
-            roomId,
-            markdown: "Please select a Web Order:",
-            attachments: [
-              {
-                contentType: "application/vnd.microsoft.card.adaptive",
-                content: card
-              }
-            ]
-          },
-          {
-            headers: {
-              Authorization: WEBEX_BOT_TOKEN,
-              "Content-Type": "application/json"
+        await axios.post("https://webexapis.com/v1/messages", {
+          roomId,
+          markdown: "Please select a Web Order:",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: card
             }
+          ]
+        }, {
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
           }
-        );
+        });
         console.log("📤 Sent dropdown card");
+        return res.sendStatus(200);
+      }
+
+      if (text.includes("stage report")) {
+        const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+        const range = "Sheet1!A2:H";
+        const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+        const rows = res.data.values || [];
+        const stageCounts = getStageCounts(rows);
+        const chartUrl = getStagePieChartUrl(stageCounts);
+
+        await axios.post("https://webexapis.com/v1/messages", {
+          roomId,
+          markdown: `📊 **Customer Stage Distribution**\n![Stage Chart](${chartUrl})`
+        }, {
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
+          }
+        });
+
+        console.log("📈 Pie chart sent to Webex");
         return res.sendStatus(200);
       }
     }
 
-    // Step 3: Process selected Web Order
     if (webOrder) {
       const customer = await getCustomerData(webOrder);
       console.log("📦 Customer data fetched:", customer);
@@ -160,16 +189,16 @@ app.post("/webhook", async (req, res) => {
         ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`
         : `⚠️ No data found for Web Order: **${webOrder}**`;
 
-      await axios.post(
-        "https://webexapis.com/v1/messages",
-        { roomId, markdown },
-        {
-          headers: {
-            Authorization: WEBEX_BOT_TOKEN,
-            "Content-Type": "application/json"
-          }
+      await axios.post("https://webexapis.com/v1/messages", {
+        roomId,
+        markdown
+      }, {
+        headers: {
+          Authorization: WEBEX_BOT_TOKEN,
+          "Content-Type": "application/json"
         }
-      );
+      });
+
       console.log("✅ Info card sent to Webex");
     }
 
