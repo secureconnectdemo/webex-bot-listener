@@ -52,9 +52,25 @@ app.post("/webhook", async (req, res) => {
 
   try {
     // 1. Handle Adaptive Card Submission
-    if (data.inputs && data.inputs.webOrder) {
-      webOrder = data.inputs.webOrder;
-    } else {
+// Always fetch the message content via Webex API
+const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
+  headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
+});
+
+let text = message.data.text?.trim();
+
+// Try to parse adaptive card submission JSON
+let parsed = {};
+try {
+  parsed = JSON.parse(text);
+} catch (e) {
+  // fallback: user typed something like "Secure show orders"
+}
+
+// If submitted via card
+if (parsed.webOrder) {
+  webOrder = parsed.webOrder;
+} else {
       // 2. Get original message
       const messageId = data.id;
       const msgRes = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
