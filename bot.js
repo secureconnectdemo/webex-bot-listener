@@ -9,7 +9,6 @@ app.use(bodyParser.json());
 
 const WEBEX_BOT_TOKEN = 'ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
 
-
 const auth = new google.auth.JWT(
   keys.client_email,
   null,
@@ -46,6 +45,19 @@ async function getCustomerData(webOrder) {
   return null;
 }
 
+async function getWebOrderOptions() {
+  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+  const range = "Sheet1!A2:A";
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
+
+  const rows = res.data.values || [];
+  return rows.map(row => row[0]);
+}
+
 app.post("/webhook", async (req, res) => {
   const messageId = req.body.data.id;
   const roomId = req.body.data.roomId;
@@ -55,15 +67,81 @@ app.post("/webhook", async (req, res) => {
       headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
     });
 
-    const text = message.data.text;
+    let text = message.data.text?.trim();
+    let webOrder = null;
 
-    let webOrder = text.trim();
-    if (webOrder.includes(" ")) {
-      webOrder = webOrder.split(" ").pop(); // In case of messages like "lookup WO-12345678"
+    // 1. Handle Adaptive Card form submission
+    if (req.body.data?.inputs?.webOrder) {
+      webOrder = req.body.data.inputs.webOrder;
     }
 
-    const customer = await getCustomerData(webOrder);
+    // 2. If typed "show orders" → send dropdown
+    if (text?.toLowerCase().includes("show orders")) {
+      const webOrders = await getWebOrderOptions();
+      const choices = webOrders.map(order => ({
+        title: order,
+        value: order
+      }));
 
+      const card = {
+        type: "AdaptiveCard",
+        body: [
+          {
+            type: "TextBlock",
+            text: "🔍 Choose a Web Order",
+            weight: "Bolder",
+            size: "Medium"
+          },
+          {
+            type: "Input.ChoiceSet",
+            id: "webOrder",
+            placeholder: "Select a Web Order",
+            choices: choices
+          }
+        ],
+        actions: [
+          {
+            type: "Action.Submit",
+            title: "Pull Customer Info"
+          }
+        ],
+        $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+        version: "1.3"
+      };
+
+      await axios.post(
+        "https://webexapis.com/v1/messages",
+        {
+          roomId,
+          markdown: "Please select a Web Order:",
+          attachments: [
+            {
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: card
+            }
+          ]
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
+            "Content-Type": "application/json"
+          }
+        }
+      );
+      return res.sendStatus(200);
+    }
+
+    // 3. If not Adaptive or dropdown: try parsing last word as webOrder
+    if (!webOrder && text) {
+      if (text.includes(" ")) {
+        webOrder = text.split(" ").pop();
+      } else {
+        webOrder = text;
+      }
+    }
+
+    // 4. Lookup customer
+    const customer = await getCustomerData(webOrder);
     let markdown;
     if (customer) {
       markdown = `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`;
