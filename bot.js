@@ -53,11 +53,11 @@ async function getCustomerData(accountName) {
 }
 
 
-function createCustomerDetailCard(customer, webOrder) {
+function createCustomerDetailCard(customer, accountName) {
   return {
     type: "AdaptiveCard",
     body: [
-      { type: "TextBlock", text: `📋 Customer Info for ${webOrder}`, weight: "Bolder", size: "Medium", wrap: true },
+      { type: "TextBlock", text: `📋 Customer Info for ${accountName}`, weight: "Bolder", size: "Medium", wrap: true },
       {
         type: "FactSet",
         facts: [
@@ -116,7 +116,7 @@ async function getWebOrderOptions() {
 app.post("/webhook", async (req, res) => {
   const { data, resource } = req.body;
   const roomId = data?.roomId;
-  let webOrder = null;
+  let accountName = null;
 
   try {
     if (resource === "attachmentActions") {
@@ -124,23 +124,23 @@ app.post("/webhook", async (req, res) => {
       const actionRes = await axios.get(`https://webexapis.com/v1/attachment/actions/${actionId}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
-      webOrder = actionRes.data.inputs.webOrder;
+      accountName = actionRes.data.inputs.accountName;
     }
 
-    if (!webOrder && data?.id) {
+    if (!accountName && data?.id) {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
       const text = messageRes.data.text?.toLowerCase().trim();
 
       if (text.includes("show orders")) {
-        const options = await getWebOrderOptions();
+        const options = (await getWebOrderOptions()).sort();
         const choices = options.map(order => ({ title: order, value: order }));
         const card = {
           type: "AdaptiveCard",
           body: [
-            { type: "TextBlock", text: "🔍 Choose a Web Order", weight: "Bolder", size: "Medium" },
-            { type: "Input.ChoiceSet", id: "webOrder", placeholder: "Select a Web Order", choices }
+            { type: "TextBlock", text: "🔍 Choose a Customer Account", weight: "Bolder", size: "Medium" },
+            { type: "Input.ChoiceSet", id: "accountName", placeholder: "Select a Web Order", choices }
           ],
           actions: [{ type: "Action.Submit", title: "Pull Customer Info" }],
           $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
@@ -177,9 +177,9 @@ app.post("/webhook", async (req, res) => {
       }
     }
 
-    if (webOrder) {
-      const customer = await getCustomerData(webOrder);
-      const card = createCustomerDetailCard(customer, webOrder);
+    if (accountName) {
+      const customer = await getCustomerData(accountName); // ✅ this was also missing!
+      const card = createCustomerDetailCard(customer, accountName);
 
       await axios.post("https://webexapis.com/v1/messages", {
         roomId,
