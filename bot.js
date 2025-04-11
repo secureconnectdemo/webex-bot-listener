@@ -1,3 +1,4 @@
+const normalizedText = text?.toLowerCase().trim();
 const commandHandlers = {
   "/help": showHelp,
   "/status": showStatus,
@@ -5,6 +6,7 @@ const commandHandlers = {
   "show orders": showOrders,
   "stage report": showStageReport
 };
+
 async function showHelp(roomId) {
   const helpMessage = `
 📖 **Help Menu – Webex Bot Commands**
@@ -222,7 +224,9 @@ app.post("/webhook", async (req, res) => {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
 
-      const text = messageRes.data.text?.toLowerCase().trim();
+      const rawText = messageRes.data.text || "";
+const text = rawText.toLowerCase().replace(/^secure\s+/i, "").trim();
+
 
       for (const [command, handler] of Object.entries(commandHandlers)) {
         if (text.startsWith(command)) {
@@ -263,6 +267,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     res.sendStatus(200);
+  }
   } catch (error) {
     console.error("❌ Bot error:", error.response?.data || error.message);
     res.sendStatus(500);
