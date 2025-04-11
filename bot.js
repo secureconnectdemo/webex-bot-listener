@@ -20,7 +20,7 @@ const sheets = google.sheets({ version: "v4", auth });
 
 async function getCustomerData(webOrder) {
   const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
-  const range = "Sheet1!A2:H";
+  const range = "Sheet1!A2:O";
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
   const rows = res.data.values;
   if (rows.length) {
@@ -33,19 +33,48 @@ async function getCustomerData(webOrder) {
         css: match[4],
         arr: match[5],
         sentiment: match[6],
-        stage: match[7]
+        stage: match[7],
+        licenseType: match[8],
+        contact: match[9],
+        outcome: match[10],
+        progress: match[11],
+        featureRequests: match[12],
+        activeCases: match[13],
+        advocacyRestrictions: match[14]
       };
     }
   }
   return null;
 }
 
-async function getWebOrderOptions() {
-  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
-  const range = "Sheet1!A2:A";
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
-  const rows = res.data.values || [];
-  return rows.map(row => row[0]);
+function createCustomerDetailCard(customer, webOrder) {
+  return {
+    type: "AdaptiveCard",
+    body: [
+      { type: "TextBlock", text: `📋 Customer Info for ${webOrder}`, weight: "Bolder", size: "Medium", wrap: true },
+      {
+        type: "FactSet",
+        facts: [
+          { title: "Requested Start Date:", value: customer.startDate },
+          { title: "Days Since Start Date:", value: customer.daysSince + " days" },
+          { title: "Onboarding Specialist:", value: customer.specialist },
+          { title: "Strategic CSS:", value: customer.css },
+          { title: "License Type:", value: customer.licenseType || "N/A" },
+          { title: "ARR:", value: `$${customer.arr}` },
+          { title: "Customer Contact:", value: customer.contact || "N/A" },
+          { title: "Sentiment:", value: customer.sentiment },
+          { title: "Current Stage:", value: customer.stage },
+          { title: "Business Outcome:", value: customer.outcome || "N/A" },
+          { title: "Progress:", value: customer.progress || "N/A" },
+          { title: "Feature Requests:", value: customer.featureRequests || "N/A" },
+          { title: "Active Cases:", value: customer.activeCases || "N/A" },
+          { title: "Advocacy Program Restrictions:", value: customer.advocacyRestrictions || "N/A" }
+        ]
+      }
+    ],
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    version: "1.3"
+  };
 }
 
 function getStageCounts(rows) {
@@ -70,6 +99,14 @@ function getStagePieChartUrl(counts) {
   return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
 }
 
+async function getWebOrderOptions() {
+  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+  const range = "Sheet1!A2:A";
+  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+  const rows = res.data.values || [];
+  return rows.map(row => row[0]);
+}
+
 app.post("/webhook", async (req, res) => {
   const { data, resource } = req.body;
   const roomId = data?.roomId;
@@ -88,7 +125,6 @@ app.post("/webhook", async (req, res) => {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
-
       const text = messageRes.data.text?.toLowerCase().trim();
 
       if (text.includes("show orders")) {
@@ -112,6 +148,7 @@ app.post("/webhook", async (req, res) => {
         }, {
           headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
         });
+
         return res.sendStatus(200);
       }
 
@@ -125,13 +162,9 @@ app.post("/webhook", async (req, res) => {
 
         await axios.post("https://webexapis.com/v1/messages", {
           roomId,
-          files: [chartUrl],
-markdown: "📊 **Customer Stage Distribution**"
+          markdown: `📊 **Customer Stage Distribution**\n\n![Stage Chart](${chartUrl})`
         }, {
-          headers: {
-            Authorization: WEBEX_BOT_TOKEN,
-            "Content-Type": "application/json"
-          }
+          headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
         });
 
         return res.sendStatus(200);
@@ -140,23 +173,18 @@ markdown: "📊 **Customer Stage Distribution**"
 
     if (webOrder) {
       const customer = await getCustomerData(webOrder);
-      const markdown = customer
-        ? `📋 **Customer Info for ${webOrder}**\n- Start Date: ${customer.startDate}\n- Days Since Start: ${customer.daysSince}\n- Onboarding Specialist: ${customer.specialist}\n- Strategic CSS: ${customer.css}\n- ARR: $${customer.arr}\n- Sentiment: ${customer.sentiment}\n- Stage: ${customer.stage}`
-        : `⚠️ No data found for Web Order: **${webOrder}**`;
-    
+      const card = createCustomerDetailCard(customer, webOrder);
+
       await axios.post("https://webexapis.com/v1/messages", {
         roomId,
-        markdown
+        markdown: "📋 Customer Info",
+        attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
       }, {
-        headers: {
-          Authorization: WEBEX_BOT_TOKEN,
-          "Content-Type": "application/json"
-        }
+        headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
       });
-    
+
       return res.sendStatus(200);
     }
-    
 
     res.sendStatus(200);
   } catch (error) {
