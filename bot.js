@@ -125,12 +125,16 @@ app.post("/webhook", async (req, res) => {
 
         await axios.post("https://webexapis.com/v1/messages", {
           roomId,
-          markdown: `📊 **Customer Stage Distribution**\n![Stage Chart](${chartUrl})`
+          markdown: `📊 **Customer Stage Distribution**  
+        Here is the chart:  
+        [Open Chart in Browser](${chartUrl})  
+        
+        ![Stage Chart](${chartUrl})`
         }, {
-          headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-        });
-        return res.sendStatus(200);
-      }
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
+          }
     }
 
     if (webOrder) {
