@@ -5,8 +5,64 @@ const axios = require("axios");
 const app = express();
 app.use(bodyParser.json());
 
-const WEBEX_BOT_TOKEN = 'Bearer ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
+const WEBEX_BOT_TOKEN = 'ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f'; // ✅ Do NOT prepend 'Bearer ' here
 
+const adaptiveCard = {
+  type: "AdaptiveCard",
+  body: [
+    {
+      type: "TextBlock",
+      text: "🔎 Customer Onboarding Lookup",
+      weight: "Bolder",
+      size: "Medium",
+      wrap: true
+    },
+    {
+      type: "Input.Text",
+      id: "webOrder",
+      placeholder: "Enter Web Order Number",
+      style: "text",
+      value: "WO-12345678"
+    },
+    {
+      type: "ActionSet",
+      actions: [
+        {
+          type: "Action.Submit",
+          title: "Pull Customer Info"
+        }
+      ]
+    },
+    {
+      type: "TextBlock",
+      text: "**Customer Details**",
+      weight: "Bolder",
+      spacing: "Medium",
+      separator: true
+    },
+    {
+      type: "FactSet",
+      facts: [
+        { title: "Requested Start Date:", value: "March 5, 2025" },
+        { title: "Days Since Start Date:", value: "36 days" },
+        { title: "Onboarding Specialist:", value: "Alex Ramirez" },
+        { title: "Strategic CSS:", value: "Jennifer Lee" },
+        { title: "License Type:", value: "Secure Access - Advanced" },
+        { title: "ARR:", value: "$82,000" },
+        { title: "Customer Contact:", value: "maria.santos@acmecorp.com" },
+        { title: "Sentiment:", value: "Positive" },
+        { title: "Current Stage:", value: "Onboarding" },
+        { title: "Business Outcome:", value: "Enable secure hybrid work for 1000 remote employees" },
+        { title: "Progress:", value: "70% – Core pilot complete" },
+        { title: "Feature Requests:", value: "ZTA Clientless, SAML IDP Failover" },
+        { title: "Active Cases:", value: "3 Open (INC12345, INC12789, SR99881)" },
+        { title: "Advocacy Program Restrictions:", value: "Pending NDA signature" }
+      ]
+    }
+  ],
+  $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+  version: "1.3"
+};
 
 app.post("/webhook", async (req, res) => {
   const messageId = req.body.data.id;
@@ -14,7 +70,7 @@ app.post("/webhook", async (req, res) => {
 
   try {
     const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
-      headers: { Authorization: WEBEX_BOT_TOKEN }
+      headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` } // ✅ Correct Bearer usage
     });
 
     const text = message.data.text;
@@ -27,7 +83,7 @@ app.post("/webhook", async (req, res) => {
         attachments: [
           {
             contentType: "application/vnd.microsoft.card.adaptive",
-            content: { /* insert your Adaptive Card JSON here */ }
+            content: adaptiveCard
           }
         ]
       },
