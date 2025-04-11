@@ -105,13 +105,14 @@ function getStagePieChartUrl(counts) {
   return `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}`;
 }
 
-async function getWebOrderOptions() {
+async function getAccountNameOptions() {
   const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
   const range = "Sheet1!A2:A";
   const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
   const rows = res.data.values || [];
-  return rows.map(row => row[0]);
+  return rows.map(row => row[0]).sort(); // 🟢 Now sorted
 }
+
 
 app.post("/webhook", async (req, res) => {
   const { data, resource } = req.body;
@@ -134,7 +135,7 @@ app.post("/webhook", async (req, res) => {
       const text = messageRes.data.text?.toLowerCase().trim();
 
       if (text.includes("show orders")) {
-        const options = (await getWebOrderOptions()).sort();
+        const options = await getAccountNameOptions(); // ✅ correct function
         const choices = options.map(order => ({ title: order, value: order }));
         const card = {
           type: "AdaptiveCard",
@@ -178,9 +179,10 @@ app.post("/webhook", async (req, res) => {
     }
 
     if (accountName) {
-      const customer = await getCustomerData(accountName); // ✅ this was also missing!
+      console.log("🔎 Received accountName:", accountName); // ✅ Log belongs here
+      const customer = await getCustomerData(accountName);
       const card = createCustomerDetailCard(customer, accountName);
-
+    
       await axios.post("https://webexapis.com/v1/messages", {
         roomId,
         markdown: "📋 Customer Info",
@@ -188,9 +190,10 @@ app.post("/webhook", async (req, res) => {
       }, {
         headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
       });
-
+    
       return res.sendStatus(200);
     }
+    
 
     res.sendStatus(200);
   } catch (error) {
@@ -201,3 +204,4 @@ app.post("/webhook", async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
+console.log("🔎 Received accountName:", accountName);
