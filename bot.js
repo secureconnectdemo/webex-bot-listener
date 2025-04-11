@@ -153,3 +153,4 @@ app.post("/webhook", async (req, res) => {
 
       const markdown = customer
         ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}
+      }
