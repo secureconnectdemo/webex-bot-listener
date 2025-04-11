@@ -66,7 +66,7 @@ app.post("/webhook", async (req, res) => {
     let webOrder = null;
 
     // Step 1: If Adaptive Card submit → fetch using POST /attachment/actions
-    if (data && data.type === "submit") {
+    if (req.body.resource === "attachmentActions") {
       const actionId = data.id;
 
       const actionRes = await axios.get(
