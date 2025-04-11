@@ -1,13 +1,72 @@
+const express = require("express");
+const bodyParser = require("body-parser");
+const axios = require("axios");
+const { google } = require("googleapis");
+const keys = require("./credentials.json");
+
+const app = express();
+app.use(bodyParser.json());
+
+const WEBEX_BOT_TOKEN = 'Bearer ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
+
+const auth = new google.auth.JWT(
+  keys.client_email,
+  null,
+  keys.private_key,
+  ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+);
+
+const sheets = google.sheets({ version: "v4", auth });
+
+async function getCustomerData(webOrder) {
+  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+  const range = "Sheet1!A2:H";
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
+
+  const rows = res.data.values;
+  if (rows.length) {
+    const match = rows.find(row => row[0] === webOrder);
+    if (match) {
+      return {
+        startDate: match[1],
+        daysSince: match[2],
+        specialist: match[3],
+        css: match[4],
+        arr: match[5],
+        sentiment: match[6],
+        stage: match[7]
+      };
+    }
+  }
+  return null;
+}
+
+async function getWebOrderOptions() {
+  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+  const range = "Sheet1!A2:A";
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
+
+  const rows = res.data.values || [];
+  return rows.map(row => row[0]);
+}
+
 app.post("/webhook", async (req, res) => {
-  const { data, resource } = req.body;
+  const { data } = req.body;
   const roomId = data.roomId;
   let webOrder = null;
 
   try {
-    // ✅ Step 1: Handle Adaptive Card Submit via attachmentActions
-    if (data && data.type === "submit") {
+    // Step 1: Check for Adaptive Card submission
+    if (data.type === "submit" && data.id) {
       const actionId = data.id;
-
       const actionRes = await axios.get(
         `https://webexapis.com/v1/attachment/actions/${actionId}`,
         {
@@ -15,12 +74,12 @@ app.post("/webhook", async (req, res) => {
         }
       );
 
-      if (actionRes.data && actionRes.data.inputs && actionRes.data.inputs.webOrder) {
+      if (actionRes.data?.inputs?.webOrder) {
         webOrder = actionRes.data.inputs.webOrder;
       }
     }
 
-    // ✅ Step 2: Handle typed message
+    // Step 2: Show dropdown if user types "show orders"
     if (!webOrder && data.id) {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
@@ -85,7 +144,7 @@ app.post("/webhook", async (req, res) => {
       }
     }
 
-    // ✅ Step 3: Lookup and respond with customer data
+    // Step 3: If a valid webOrder was submitted, send customer info
     if (webOrder) {
       const customer = await getCustomerData(webOrder);
 
@@ -114,3 +173,6 @@ app.post("/webhook", async (req, res) => {
     res.sendStatus(500);
   }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
