@@ -18,13 +18,18 @@ const auth = new google.auth.JWT(
 
 const sheets = google.sheets({ version: "v4", auth });
 
-async function getCustomerData(webOrder) {
+async function getCustomerData(accountName) {
   const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
   const range = "Sheet1!A2:O";
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
+
   const rows = res.data.values;
   if (rows.length) {
-    const match = rows.find(row => row[0] === webOrder);
+    const match = rows.find(row => row[0].toLowerCase() === accountName.toLowerCase());
     if (match) {
       return {
         startDate: match[1],
@@ -46,6 +51,7 @@ async function getCustomerData(webOrder) {
   }
   return null;
 }
+
 
 function createCustomerDetailCard(customer, webOrder) {
   return {
