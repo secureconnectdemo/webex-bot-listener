@@ -15,72 +15,69 @@ const auth = new google.auth.JWT(
   keys.private_key,
   ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 );
+
 const sheets = google.sheets({ version: "v4", auth });
 
 async function getCustomerData(webOrder) {
   const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
   const range = "Sheet1!A2:H";
 
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
-  const rows = res.data.values;
-  const match = rows.find(row => row[0] === webOrder);
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
 
-  return match ? {
-    startDate: match[1],
-    daysSince: match[2],
-    specialist: match[3],
-    css: match[4],
-    arr: match[5],
-    sentiment: match[6],
-    stage: match[7]
-  } : null;
+  const rows = res.data.values;
+  if (rows.length) {
+    const match = rows.find(row => row[0] === webOrder);
+    if (match) {
+      return {
+        startDate: match[1],
+        daysSince: match[2],
+        specialist: match[3],
+        css: match[4],
+        arr: match[5],
+        sentiment: match[6],
+        stage: match[7]
+      };
+    }
+  }
+  return null;
 }
 
 async function getWebOrderOptions() {
   const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
   const range = "Sheet1!A2:A";
 
-  const res = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range: range
+  });
+
   const rows = res.data.values || [];
   return rows.map(row => row[0]);
 }
 
 app.post("/webhook", async (req, res) => {
-  const { data } = req.body;
-  const roomId = data.roomId;
+  let roomId = req.body.data.roomId;
   let webOrder = null;
+  let text = null;
 
   try {
-    // 1. Handle Adaptive Card Submission
-// Always fetch the message content via Webex API
-const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
-  headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
-});
-
-let text = message.data.text?.trim();
-
-// Try to parse adaptive card submission JSON
-let parsed = {};
-try {
-  parsed = JSON.parse(text);
-} catch (e) {
-  // fallback: user typed something like "Secure show orders"
-}
-
-// If submitted via card
-if (parsed.webOrder) {
-  webOrder = parsed.webOrder;
-} else {
-      // 2. Get original message
-      const messageId = data.id;
-      const msgRes = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
+    // If it's an Adaptive Card submission
+    if (req.body.data.inputs && req.body.data.inputs.webOrder) {
+      webOrder = req.body.data.inputs.webOrder;
+    } else {
+      // Typed message - get message text using messageId
+      const messageId = req.body.data.id;
+      const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
         headers: { Authorization: `Bearer ${WEBEX_BOT_TOKEN}` }
       });
 
-      const text = msgRes.data.text?.trim().toLowerCase();
+      text = message.data.text?.trim();
 
-      // 3. Handle "show orders" command
-      if (text.includes("show orders")) {
+      // If message says "show orders", show dropdown
+      if (text?.toLowerCase().includes("show orders")) {
         const webOrders = await getWebOrderOptions();
         const choices = webOrders.map(order => ({ title: order, value: order }));
 
@@ -110,44 +107,57 @@ if (parsed.webOrder) {
           version: "1.3"
         };
 
-        await axios.post("https://webexapis.com/v1/messages", {
-          roomId,
-          markdown: "Please select a Web Order:",
-          attachments: [{
-            contentType: "application/vnd.microsoft.card.adaptive",
-            content: card
-          }]
-        }, {
-          headers: {
-            Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
-            "Content-Type": "application/json"
+        await axios.post(
+          "https://webexapis.com/v1/messages",
+          {
+            roomId,
+            markdown: "Please select a Web Order:",
+            attachments: [
+              {
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: card
+              }
+            ]
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
+              "Content-Type": "application/json"
+            }
           }
-        });
-
-        return res.sendStatus(200); // Done here
+        );
+        return res.sendStatus(200);
       }
 
-      // 4. Handle messages like "Secure WO-00000001"
-      const parts = msgRes.data.text?.trim().split(" ");
-      webOrder = parts?.[parts.length - 1];
+      // Otherwise, fallback to last word in message
+      if (text) {
+        webOrder = text.split(" ").pop();
+      }
     }
 
-    // 5. Lookup customer data
+    // Now try to look up the customer
     const customer = await getCustomerData(webOrder);
+    let markdown;
 
-    const markdown = customer
-      ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`
-      : `⚠️ No data found for Web Order: **${webOrder}**`;
+    if (customer) {
+      markdown = `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`;
+    } else {
+      markdown = `⚠️ No data found for Web Order: **${webOrder}**`;
+    }
 
-    await axios.post("https://webexapis.com/v1/messages", {
-      roomId,
-      markdown
-    }, {
-      headers: {
-        Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
-        "Content-Type": "application/json"
+    await axios.post(
+      "https://webexapis.com/v1/messages",
+      {
+        roomId,
+        markdown
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
-    });
+    );
 
     res.sendStatus(200);
   } catch (error) {
