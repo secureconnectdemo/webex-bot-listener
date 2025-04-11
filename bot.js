@@ -1,4 +1,3 @@
-const normalizedText = text?.toLowerCase().trim();
 const commandHandlers = {
   "/help": showHelp,
   "/status": showStatus,
