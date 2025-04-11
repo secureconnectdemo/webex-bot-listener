@@ -23,11 +23,17 @@ app.post("/webhook", async (req, res) => {
       "https://webexapis.com/v1/messages",
       {
         roomId,
-        markdown: `👋 Bot received your message: **${text}**`
+        markdown: "Here's the onboarding summary:",
+        attachments: [
+          {
+            contentType: "application/vnd.microsoft.card.adaptive",
+            content: { /* insert your Adaptive Card JSON here */ }
+          }
+        ]
       },
       {
         headers: {
-          Authorization: WEBEX_BOT_TOKEN,
+          Authorization: `Bearer ${WEBEX_BOT_TOKEN}`,
           "Content-Type": "application/json"
         }
       }
