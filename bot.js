@@ -133,7 +133,28 @@ app.post("/webhook", async (req, res) => {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
       const text = messageRes.data.text?.toLowerCase().trim();
-
+      if (text === "/help" || text === "help") {
+        const helpMessage = `
+      📖 **Help Menu – Webex Bot Commands**
+      Here are some things you can ask me:
+      
+      • \`/help\` – Show this help message  
+      • \`show orders\` – Choose a customer account to view details  
+      • \`stage report\` – Get a pie chart showing onboarding stage distribution
+      `;
+      
+        await axios.post("https://webexapis.com/v1/messages", {
+          roomId,
+          markdown: helpMessage
+        }, {
+          headers: {
+            Authorization: WEBEX_BOT_TOKEN,
+            "Content-Type": "application/json"
+          }
+        });
+      
+        return res.sendStatus(200);
+      }
       if (text.includes("show orders")) {
         const options = await getAccountNameOptions(); // ✅ correct function
         const choices = options.map(order => ({ title: order, value: order }));
