@@ -151,6 +151,39 @@ async function getAccountNameOptions() {
   const rows = res.data.values || [];
   return rows.map(row => row[0]).sort(); // 🟢 Now sorted
 }
+async function showOrders(roomId) {
+  const options = await getAccountNameOptions();
+  const choices = options.map(order => ({ title: order, value: order }));
+
+  const card = {
+    type: "AdaptiveCard",
+    body: [
+      {
+        type: "TextBlock",
+        text: "🔍 Choose a Customer Account",
+        weight: "Bolder",
+        size: "Medium"
+      },
+      {
+        type: "Input.ChoiceSet",
+        id: "accountName",
+        placeholder: "Select an Account",
+        choices
+      }
+    ],
+    actions: [{ type: "Action.Submit", title: "Pull Customer Info" }],
+    $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
+    version: "1.3"
+  };
+
+  await axios.post("https://webexapis.com/v1/messages", {
+    roomId,
+    markdown: "Please select a Customer Account:",
+    attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
+  }, {
+    headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
+  });
+}
 
 
 app.post("/webhook", async (req, res) => {
