@@ -59,14 +59,15 @@ async function getWebOrderOptions() {
 }
 
 app.post("/webhook", async (req, res) => {
-  const { data } = req.body;
-  const roomId = data.roomId;
+  console.log("📥 Webhook Received:", JSON.stringify(req.body, null, 2));
+
+  const { data, resource } = req.body;
+  let roomId = data.roomId;
+  let webOrder = null;
 
   try {
-    let webOrder = null;
-
-    // Step 1: If Adaptive Card submit → fetch using POST /attachment/actions
-    if (req.body.resource === "attachmentActions") {
+    // Step 1: If Adaptive Card Submit → Get action data
+    if (resource === "attachmentActions") {
       const actionId = data.id;
 
       const actionRes = await axios.get(
@@ -78,6 +79,7 @@ app.post("/webhook", async (req, res) => {
 
       const inputs = actionRes.data.inputs;
       webOrder = inputs.webOrder;
+      roomId = actionRes.data.roomId; // ✅ Very important
     }
 
     // Step 2: If message contains "show orders" → return dropdown
@@ -140,36 +142,14 @@ app.post("/webhook", async (req, res) => {
             }
           }
         );
+
         return res.sendStatus(200);
       }
     }
 
-    // Step 3: If a Web Order was found, fetch and return info
-    if (webOrder) {
+    // Step 3: If webOrder selected, show customer info
+    if (webOrder && roomId) {
       const customer = await getCustomerData(webOrder);
 
       const markdown = customer
-        ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}  \n- Sentiment: ${customer.sentiment}  \n- Stage: ${customer.stage}`
-        : `⚠️ No data found for Web Order: **${webOrder}**`;
-
-      await axios.post(
-        "https://webexapis.com/v1/messages",
-        { roomId, markdown },
-        {
-          headers: {
-            Authorization: WEBEX_BOT_TOKEN,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-    }
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Bot error:", error.response?.data || error.message);
-    res.sendStatus(500);
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
+        ? `📋 **Customer Info for ${webOrder}**  \n- Start Date: ${customer.startDate}  \n- Days Since Start: ${customer.daysSince}  \n- Onboarding Specialist: ${customer.specialist}  \n- Strategic CSS: ${customer.css}  \n- ARR: $${customer.arr}
