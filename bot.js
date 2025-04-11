@@ -24,6 +24,21 @@ async function showHelp(roomId) {
     }
   });
 }
+async function showStageReport(roomId) {
+  const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
+  const range = "Sheet1!A2:H";
+  const resData = await sheets.spreadsheets.values.get({ spreadsheetId: sheetId, range });
+  const rows = resData.data.values || [];
+  const stageCounts = getStageCounts(rows);
+  const chartUrl = getStagePieChartUrl(stageCounts);
+
+  await axios.post("https://webexapis.com/v1/messages", {
+    roomId,
+    markdown: `📊 **Customer Stage Distribution**\n\n![Stage Chart](${chartUrl})`
+  }, {
+    headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
+  });
+}
 
 async function showStatus(roomId) {
   await axios.post("https://webexapis.com/v1/messages", {
