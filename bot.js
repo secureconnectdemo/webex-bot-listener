@@ -5,11 +5,6 @@ const WEBEX_BOT_TOKEN = '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E';const expres
 const bodyParser = require("body-parser");
 const axios = require("axios");
 
-const app = express();
-app.use(bodyParser.json());
-
-const WEBEX_BOT_TOKEN = "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E"; // Replace with your full token
-
 app.post("/webhook", async (req, res) => {
   const messageId = req.body.data.id;
   const roomId = req.body.data.roomId;
