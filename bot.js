@@ -5,7 +5,7 @@ const axios = require("axios");
 const app = express();
 app.use(bodyParser.json());
 
-const WEBEX_BOT_TOKEN = 'Zjc5YzgxN2EtYWQwYy00YTBkLWFiMTctMzc0NzQ2MDcxZGE5ZDVlMGRiNDMtYjEx_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
+const WEBEX_BOT_TOKEN = 'ZThjNjI1NDAtZmRkMC00YjUyLWJhMzktZWZmNDAyZmE3NTMzMzBkOGEzMjYtNzBi_PF84_1eb65fdf-9643-417f-9974-ad72cae0e10f';
 
 app.post("/webhook", async (req, res) => {
   const messageId = req.body.data.id;
