@@ -59,30 +59,38 @@ async function getWebOrderOptions() {
 }
 
 app.post("/webhook", async (req, res) => {
-  const data = req.body.data;
+  const { data } = req.body;
   const roomId = data.roomId;
 
   try {
     let webOrder = null;
 
-    // ✅ Handle Adaptive Card submission
-    if (data && data.inputs && data.inputs.webOrder) {
-      webOrder = data.inputs.webOrder;
+    // Step 1: If Adaptive Card submit → fetch using POST /attachment/actions
+    if (data && data.type === "submit") {
+      const actionId = data.id;
+
+      const actionRes = await axios.get(
+        `https://webexapis.com/v1/attachment/actions/${actionId}`,
+        {
+          headers: { Authorization: WEBEX_BOT_TOKEN }
+        }
+      );
+
+      const inputs = actionRes.data.inputs;
+      webOrder = inputs.webOrder;
     }
 
-    // ✅ Fallback: if user typed "show orders" → show dropdown
-    if (!webOrder) {
-      const messageId = data.id;
-
-      const message = await axios.get(`https://webexapis.com/v1/messages/${messageId}`, {
+    // Step 2: If message contains "show orders" → return dropdown
+    if (!webOrder && data && data.id) {
+      const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
 
-      const text = message.data.text?.trim().toLowerCase();
+      const text = messageRes.data.text?.toLowerCase().trim();
 
-      if (text && text.includes("show orders")) {
-        const webOrders = await getWebOrderOptions();
-        const choices = webOrders.map(order => ({
+      if (text.includes("show orders")) {
+        const options = await getWebOrderOptions();
+        const choices = options.map(order => ({
           title: order,
           value: order
         }));
@@ -100,7 +108,7 @@ app.post("/webhook", async (req, res) => {
               type: "Input.ChoiceSet",
               id: "webOrder",
               placeholder: "Select a Web Order",
-              choices: choices
+              choices
             }
           ],
           actions: [
@@ -134,15 +142,9 @@ app.post("/webhook", async (req, res) => {
         );
         return res.sendStatus(200);
       }
-
-      // Fallback if typed message is not "show orders"
-      if (text) {
-        const words = text.split(" ");
-        webOrder = words[words.length - 1];
-      }
     }
 
-    // ✅ Lookup and reply with customer data
+    // Step 3: If a Web Order was found, fetch and return info
     if (webOrder) {
       const customer = await getCustomerData(webOrder);
 
@@ -164,7 +166,7 @@ app.post("/webhook", async (req, res) => {
 
     res.sendStatus(200);
   } catch (error) {
-    console.error("❌ Bot error:", error.message);
+    console.error("❌ Bot error:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
