@@ -1,3 +1,42 @@
+const commandHandlers = {
+  "/help": showHelp,
+  "/status": showStatus,
+  "/ping": showStatus,
+  "show orders": showOrders,
+  "stage report": showStageReport
+};
+async function showHelp(roomId) {
+  const helpMessage = `
+📖 **Help Menu – Webex Bot Commands**
+
+• \`/help\` – Show this help message  
+• \`/status\` or \`/ping\` – Check if the bot is running  
+• \`show orders\` – Select a customer account to view  
+• \`stage report\` – View a pie chart of onboarding stages  
+`;
+  await axios.post("https://webexapis.com/v1/messages", {
+    roomId,
+    markdown: helpMessage
+  }, {
+    headers: {
+      Authorization: WEBEX_BOT_TOKEN,
+      "Content-Type": "application/json"
+    }
+  });
+}
+
+async function showStatus(roomId) {
+  await axios.post("https://webexapis.com/v1/messages", {
+    roomId,
+    markdown: "✅ Bot is running and ready!"
+  }, {
+    headers: {
+      Authorization: WEBEX_BOT_TOKEN,
+      "Content-Type": "application/json"
+    }
+  });
+}
+
 const express = require("express");
 const bodyParser = require("body-parser");
 const axios = require("axios");
@@ -132,54 +171,53 @@ app.post("/webhook", async (req, res) => {
       const messageRes = await axios.get(`https://webexapis.com/v1/messages/${data.id}`, {
         headers: { Authorization: WEBEX_BOT_TOKEN }
       });
+    
       const text = messageRes.data.text?.toLowerCase().trim();
-      if (text === "/help" || text === "help") {
-        const helpMessage = `
-      📖 **Help Menu – Webex Bot Commands**
-      Here are some things you can ask me:
-      
-      • \`/help\` – Show this help message  
-      • \`show orders\` – Choose a customer account to view details  
-      • \`stage report\` – Get a pie chart showing onboarding stage distribution
-      `;
-      
-        await axios.post("https://webexapis.com/v1/messages", {
-          roomId,
-          markdown: helpMessage
-        }, {
-          headers: {
-            Authorization: WEBEX_BOT_TOKEN,
-            "Content-Type": "application/json"
-          }
-        });
-      
-        return res.sendStatus(200);
+    
+      for (const [command, handler] of Object.entries(commandHandlers)) {
+        if (text.startsWith(command)) {
+          await handler(roomId);
+          return res.sendStatus(200);
+        }
       }
+    
+      // If not a known slash command, check for dropdown trigger:
       if (text.includes("show orders")) {
-        const options = await getAccountNameOptions(); // ✅ correct function
+        const options = await getAccountNameOptions();
         const choices = options.map(order => ({ title: order, value: order }));
+    
         const card = {
           type: "AdaptiveCard",
           body: [
-            { type: "TextBlock", text: "🔍 Choose a Customer Account", weight: "Bolder", size: "Medium" },
-            { type: "Input.ChoiceSet", id: "accountName", placeholder: "Select a Web Order", choices }
+            {
+              type: "TextBlock",
+              text: "🔍 Choose a Customer Account",
+              weight: "Bolder",
+              size: "Medium"
+            },
+            {
+              type: "Input.ChoiceSet",
+              id: "accountName",
+              placeholder: "Select an Account",
+              choices
+            }
           ],
           actions: [{ type: "Action.Submit", title: "Pull Customer Info" }],
           $schema: "http://adaptivecards.io/schemas/adaptive-card.json",
           version: "1.3"
         };
-
+    
         await axios.post("https://webexapis.com/v1/messages", {
           roomId,
-          markdown: "Please select a Web Order:",
+          markdown: "Please select a Customer Account:",
           attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
         }, {
           headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
         });
-
+    
         return res.sendStatus(200);
       }
-
+    
       if (text.includes("stage report")) {
         const sheetId = "1YiP4zgb6jpAL1JyaiKs8Ud-MH11KTPkychc1y3_WirI";
         const range = "Sheet1!A2:H";
@@ -187,41 +225,17 @@ app.post("/webhook", async (req, res) => {
         const rows = resData.data.values || [];
         const stageCounts = getStageCounts(rows);
         const chartUrl = getStagePieChartUrl(stageCounts);
-
+    
         await axios.post("https://webexapis.com/v1/messages", {
           roomId,
           markdown: `📊 **Customer Stage Distribution**\n\n![Stage Chart](${chartUrl})`
         }, {
           headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
         });
-
+    
         return res.sendStatus(200);
       }
-    }
-
-    if (accountName) {
-      console.log("🔎 Received accountName:", accountName); // ✅ Log belongs here
-      const customer = await getCustomerData(accountName);
-      const card = createCustomerDetailCard(customer, accountName);
-    
-      await axios.post("https://webexapis.com/v1/messages", {
-        roomId,
-        markdown: "📋 Customer Info",
-        attachments: [{ contentType: "application/vnd.microsoft.card.adaptive", content: card }]
-      }, {
-        headers: { Authorization: WEBEX_BOT_TOKEN, "Content-Type": "application/json" }
-      });
-    
-      return res.sendStatus(200);
-    }
-    
-
-    res.sendStatus(200);
-  } catch (error) {
-    console.error("❌ Bot error:", error.response?.data || error.message);
-    res.sendStatus(500);
-  }
-});
+    }    
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`✅ Bot server running on port ${PORT}`));
