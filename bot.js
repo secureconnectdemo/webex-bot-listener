@@ -1,14 +1,4 @@
 
-const rawText = messageRes.data.text || "";
-const text = rawText.toLowerCase().replace(/^secure\s*/i, "").trim();
-console.log("📥 Normalized Text:", text);
-
-for (const [command, handler] of Object.entries(commandHandlers)) {
-  if (text.startsWith(command)) {
-    await handler(roomId);
-    return res.sendStatus(200);
-  }
-}
 
 const commandHandlers = {
   "/help": showHelp,
